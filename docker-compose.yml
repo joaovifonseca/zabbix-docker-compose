@@ -1,95 +1,420 @@
 version: '3.1'
 
-networks:
-  network-zabbix:
-    driver: bridge
-
 services:
-  mysql:
-    container_name: mysql
-    image: mysql:8.0
-    networks:
-      - network-zabbix
-    ports:
-      - '3306:3306'
-    volumes:
-      - './zabbix/mysql:/var/lib/data'
-    environment:
-      - MYSQL_ROOT_PASSWORD=root_pwd
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_pwd
+  # zabbix:
 
-  zabbix-server:
-    container_name: zabbix-server
-    image: zabbix/zabbix-server-mysql:ubuntu-5.0.1
-    networks:
-      - network-zabbix
-    links:
-      - mysql
-    restart: always
-    ports:
-      - '10051:10051'
-    volumes:
-      - './zabbix/alertscripts:/usr/lib/zabbix/alertscripts'
-    environment:
-      - DB_SERVER_HOST=mysql
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_pwd
-    depends_on:
-      - mysql
+  #   container_name: zabbix
+  #   ports:
+  #     - "80:8080"
+  #     - "10051:10051"
+  #     - "3000:3000"
 
-  zabbix-frontend:
-    container_name: zabbix-frontend
-    image: zabbix/zabbix-web-apache-mysql:ubuntu-5.0.1
-    networks:
-      - network-zabbix
-    links:
-      - mysql
-    restart: always
-    ports:
-      - '80:8080'
-      - '443:8443'
-    environment:
-      - DB_SERVER_HOST=mysql
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_pwd
-      - PHP_TZ=America/Sao_Paulo
-    depends_on:
-      - mysql
-   
-  grafana:
-    container_name: grafana
-    image: grafana/grafana
-    networks:
-      - network-zabbix
-    links:
-      - mysql
-      - zabbix-server
-    restart: always
-    ports:
-      - '3000:3000'
-    environment: 
-      - GF_INSTALL_PLUGINS=alexanderzobnin-zabbix-app
-    depends_on:
-      - mysql
-      - zabbix-server
+ 
   zabbix-agent:
+    pod: zabbix
+    image: zabbix/zabbix-agent
     container_name: zabbix-agent
-    image: zabbix/zabbix-agent2:alpine-5.0.1
-    user: root
-    networks:
-      - network-zabbix
-    links:
-      - zabbix-server
     restart: always
-    privileged: true
-    volumes:
-      - /var/run:/var/run
-    ports:
-      - '10050:10050'
     environment:
-      - ZBX_HOSTNAME=Zabbix server
       - ZBX_SERVER_HOST=127.0.0.1,localhost
+
+  mysql-server:
+    depends_on:
+     - zabbix-agent
+    pod: zabbix
+    image: mysql:8.0 
+    container_name: mysql-server
+    command: --character-set-server=utf8 --collation-server=utf8_bin --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      - MYSQL_DATABASE=zabbix
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix_pwd
+      - MYSQL_ROOT_PASSWORD=root_pwd
+    volumes:
+      - '/opt/mysql/:/var/lib/mysql/:Z'
+
+  zabbix-server-mysql:
+    depends_on:
+     - mysql-server
+    pod: zabbix
+    image: zabbix/zabbix-server-mysql
+    container-name: zabbix-server-mysql
+    restart: always
+    environment:
+      - DB_SERVER_HOST=127.0.0.1
+      - MYSQL_DATABASE=zabbix"
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix_pwd
+      - MYSQL_ROOT_PASSWORD=root_pwd 
+      - ZBX_JAVAGATEWAY=127.0.0.1
+  
+  zabbix-java-gateway:
+    depends_on:
+     - zabbix-server-mysql
+    pod: zabbix
+    image: zabbix/zabbix-java-gateway
+    restart: always
+    container-name: zabbix-java-gateway
+
+  zabbix-web-mysql:
+    depends_on:
+     - zabbix-java-gateway
+    pod: zabbix
+    container-name: zabbix-web-mysql
+    image: zabbix/zabbix-web-nginx-mysql
+    restart: always
+    environment:
+      - DB_SERVER_HOST=127.0.0.1
+      - MYSQL_DATABASE=zabbix"
+      - MYSQL_USER=zabbix
+      - MYSQL_PASSWORD=zabbix_pwd
+      - MYSQL_ROOT_PASSWORD=root_pwd 
+      - ZBX_SERVER_HOST=127.0.0.1
+      
+  grafana:
+    depends_on:
+     - zabbix-web-mysql 
+    pod: zabbix
+    container-name: grafana
+    image: grafana/grafana
+    restart: always
+
+
+
+# podman pull docker.io/zabbix/zabbix-java-gateway
+# podman pull docker.io/zabbix/zabbix-web-nginx-mysql
+# podman pull zabbix/zabbix-agent
+# podman pull docker.io/library/mysql:8.0
+# podman pull docker.io/zabbix/zabbix-server-mysql
+# podman pull grafana/grafana
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Começarzabbix-snmptraps
+Inicie um container snmptraps do Zabbix da seguinte forma:
+
+podman pull zabbix/zabbix-snmptraps
+podman run --name some-zabbix-snmptraps -p 162:1162/udp -d zabbix/zabbix-snmptraps:tag
+podman run --name some-zabbix-snmptraps -p 162:1162/udp -d zabbix/zabbix-snmptraps
+
+Vinculando o servidor Zabbix ou o proxy Zabbix ao container
+podman run --name some-zabbix-server --link some-zabbix-snmptraps:zabbix-snmptraps --volumes-from some-zabbix-snmptraps -d zabbix/zabbix-server:tag
+
+Acesso ao shell do contêiner e visualização de logs de snmptraps do Zabbix
+podman exec -ti some-zabbix-snmptraps /bin/bash
+log do snmptraps do Zabbix 
+docker logs  some-zabbix-snmptraps
+
+
+
+
+
+podman run --name zabbix-snmptraps -t \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:rw \
+-v /usr/share/snmp/mibs/:/usr/share/snmp/mibs:ro \
+--network=zabbix-net \
+-p 162:1162/udp \
+--restart unless-stopped \
+-d zabbix/zabbix-snmptraps:alpine-5.4-latest
+
+
+
+podman run --name zabbix-server-pgsql -t \
+-e DB_SERVER_HOST="192.168.70.15" \
+-e POSTGRES_USER="zabbix" \
+-e POSTGRES_PASSWORD="zabbix" \
+-e POSTGRES_DB="zabbix2" \
+-e ZBX_ENABLE_SNMP_TRAPS="true" \
+-p 10052:10052 \
+--volumes-from some-zabbix-snmptraps \
+--restart unless-stopped \
+-d zabbix/zabbix-server-pgsql:alpine-5.4-latest
+
+
+
+
+
+
+
+
+
+
+SUBINDO O ZABBIX E GRAFANA NO PODMAN COM POD
+
+
+
+Nesse artigo estamos usando um distro do CentOS Stream 8 com Podman.
+
+Primeiro vamos baixar os contêineres:
+
+# podman pull docker.io/zabbix/zabbix-java-gateway
+# podman pull docker.io/zabbix/zabbix-web-nginx-mysql
+# podman pull zabbix/zabbix-agent
+# podman pull docker.io/library/mysql:8.0
+# podman pull docker.io/zabbix/zabbix-server-mysql
+# podman pull grafana/grafana
+
+Agora que baixamos as imagens, vamos criar o pod:
+
+# podman pod create --name zabbix -p 80:8080 -p 10051:10051 -p 3000:3000
+
+Agora vamos subir os contêineres no pod "zabbix":
+
+Zabbix-Agent:
+
+# podman run --name zabbix-agent \
+    -eZBX_SERVER_HOST="127.0.0.1,localhost" \
+     --restart=always \
+     --pod=zabbix \
+     -d zabbix/zabbix-agent
+
+MySQL Server:
+
+Vamos criar um diretório para o MySQL, para persistir os dados:
+
+# mkdir /opt/mysql
+
+Vamos subir o contêiner:
+
+# podman run --name mysql-server \
+   -t -e MYSQL_DATABASE="zabbix" \
+  -e MYSQL_USER="zabbix" \
+  -e MYSQL_PASSWORD="zabbix_pwd" \
+  -e MYSQL_ROOT_PASSWORD="root_pwd" \
+   -v /opt/mysql/:/var/lib/mysql/:Z \
+   --restart=always \
+   --pod=zabbix \
+    -d mysql:8.0 --character-set-server=utf8 --collation-server=utf8_bin --default-authentication-plugin=mysql_native_password
+
+Zabbix Server MySQL:
+
+# podman run --name zabbix-server-mysql \
+  -t -e DB_SERVER_HOST="127.0.0.1" \
+  -e MYSQL_DATABASE="zabbix" \
+  -e MYSQL_USER="zabbix" \
+  -e MYSQL_PASSWORD="zabbix_pwd" \
+  -e MYSQL_ROOT_PASSWORD="root_pwd" \
+  -e ZBX_JAVAGATEWAY="127.0.0.1" \
+  --restart=always --pod=zabbix -d zabbix/zabbix-server-mysql
+
+Zabbix Java Gateway:
+
+# podman run --name zabbix-java-gateway -t --restart=always --pod=zabbix -d zabbix/zabbix-java-gateway
+
+Zabbix Web MySQL:
+
+# podman run --name zabbix-web-mysql \
+   -t -e ZBX_SERVER_HOST="127.0.0.1" \
+   -e DB_SERVER_HOST="127.0.0.1" \
+   -e MYSQL_DATABASE="zabbix" \
+   -e MYSQL_USER="zabbix" \
+   -e MYSQL_PASSWORD="zabbix_pwd" \
+   -e MYSQL_ROOT_PASSWORD="root_pwd" \
+   --restart=always --pod=zabbix \
+   -d zabbix/zabbix-web-nginx-mysql
+
+Grafana:
+
+# podman run --name grafana --restart=always --pod=zabbix -d grafana/grafana
+
+Pronto!
+
+
+Entrar no pod e ver o arquivo de configuracao
+podman exec -ti zabbix-server-mysql /bin/bash
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+podman pod create --name zabbix -p 80:8080 -p 10051:10051 -p 162:1162/udp -p 3000:3000
+
+podman run -d --name=grafana -p 3000:3000 docker.io/grafana/grafana-enterprise
+
+podman run --name zabbix-snmptraps -t \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:rw \
+-v /var/lib/zabbix/mibs:/usr/share/snmp/mibs:ro \
+--pod=zabbix \
+--restart unless-stopped \
+-d docker.io/zabbix/zabbix-snmptraps:latest
+
+
+podman run --name zabbix-agent \
+-e ZBX_SERVER_HOST="127.0.0.1,localhost" \
+--restart=always \
+--pod=zabbix \
+-d docker.io/zabbix/zabbix-agent:latest
+
+
+podman run --name zabbix-server-pgsql -t \
+-e DB_SERVER_HOST="192.168.70.15" \
+-e POSTGRES_DATABASE="zabbix7" \
+-e POSTGRES_USER="zabbix7" \
+-e POSTGRES_PASSWORD="zabbix7" \
+-e ZBX_ENABLE_SNMP_TRAPS="true" \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:rw \
+-v /var/lib/zabbix/mibs:/usr/share/snmp/mibs:ro \
+--restart=always \
+--pod=zabbix \
+-d docker.io/zabbix/zabbix-server-pgsql:latest
+
+podman run --name zabbix-web-nginx-pgsql -t \
+-e ZBX_SERVER_HOST="127.0.0.1" \
+-e DB_SERVER_HOST="192.168.70.15" \
+-e POSTGRES_DATABASE="zabbix7" \
+-e POSTGRES_USER="zabbix7" \
+-e POSTGRES_PASSWORD="zabbix7" \
+-e ZBX_ENABLE_SNMP_TRAPS="true" \
+--restart=always \
+--pod=zabbix \
+-d docker.io/zabbix/zabbix-web-nginx-pgsql:latest
+
+
+podman generate systemd --restart-policy=always -t 1 -f --name zabbix
+
+cp pod-zabbix.service container-zabbix-* /etc/systemd/system/
+
+systemctl enable --now pod-zabbix.service
+
+
+
+
+
+
+
+
+
+
+
+For those who end up in the same situation the answer is selinux context. You need to append "z" option to the shares that
+both zabbix server and snmp traps access together with couple minor changes to adjust docker instructions to podman accross all contaioners.
+
+So
+
+podman run --name zabbix-snmptraps -t \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:rw \
+-v /var/lib/zabbix/mibs:/usr/share/snmp/mibs:ro \
+--network=zabbix-net \
+-p 162:1162/udp \
+--restart unless-stopped \
+-d zabbix/zabbix-snmptraps:alpine-5.4-latest
+
+
+podman run --name zabbix-server-pgsql -t \
+-e DB_SERVER_HOST="192.168.70.15" \
+-e POSTGRES_USER="zabbix" \
+-e POSTGRES_PASSWORD="zabbix" \
+-e POSTGRES_DB="zabbix2" \
+-e ZBX_ENABLE_SNMP_TRAPS="true" \
+--network=zabbix-net \
+-p 10051:10051 \
+--volumes-from zabbix-snmptraps \
+--restart unless-stopped \
+-d zabbix/zabbix-server-pgsql:alpine-5.4-latest
+
+becomes
+
+podman run --name zabbix-snmptraps -t \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:z \
+-v /var/lib/zabbix/mibs:/usr/share/snmp/mibs:z \
+--pod=zabbix \
+--restart=always \
+-d zabbix/zabbix-snmptraps:alpine-5.4-latest
+
+
+podman run --name zabbix-server-pgsql -t \
+-e DB_SERVER_HOST="192.168.70.15" \
+-e POSTGRES_USER="zabbix" \
+-e POSTGRES_PASSWORD="zabbix" \
+-e POSTGRES_DB="zabbix2" \
+-e ZBX_ENABLE_SNMP_TRAPS="true" \
+--pod=zabbix \
+-v /zbx_instance/snmptraps:/var/lib/zabbix/snmptraps:z \
+-v /var/lib/zabbix/mibs:/usr/share/snmp/mibs:z \
+--restart=always \
+-d zabbix/zabbix-server-pgsql:alpine-5.4-latest
+
+Good luck
